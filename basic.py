@@ -29,22 +29,27 @@ TT_EOF				= 'EOF'
 
 class Error:
     def __init__(self, position_start, position_end, error_name, details):
+        self.position_start = position_start
+        self.position_end = position_end
         self.error_name = error_name
         self.details = details
         
     def as_string(self):
         result = f'{self.error_name}: {self.details}'
+        result += f'\nArquivo {self.position_start.file_name}, linha {self.position_start.line + 1}'
         return result
     
 class IllegalCharError(Error):
-    def __init__(self, details):
-        super().__init__('Caractere inválido', details)
+    def __init__(self, position_start, position_end, details):
+        super().__init__(position_start, position_end, 'Caractere inválido', details)
         
 class Position:
-    def __init__(self, index, line, column):
+    def __init__(self, index, line, column, file_name, file_text):
         self.index = index
         self.line = line
         self.column = column
+        self.file_name = file_name
+        self.file_text = file_text
         
     def advance(self, currenct_character):
         self.index += 1
@@ -57,7 +62,7 @@ class Position:
         return self
     
     def copy(self):
-        return Position(self.index, self.line, self.column)
+        return Position(self.index, self.line, self.column, self.file_name, self.file_text)
 
 class Token:
     def __init__(self, type_, value=None):
@@ -69,14 +74,15 @@ class Token:
         return f'{self.type}'
     
 class Lexer:
-    def __init__(self, text):
+    def __init__(self, file_name, text):
+        self.file_name = file_name
         self.text = text
-        self.position = Position(-1, 0, -1)
+        self.position = Position(-1, 0, -1, file_name, text)
         self.current_character = None
         self.advance()
         
     def advance(self):
-        self.position.advance()
+        self.position.advance(self.current_character)
         self.current_character = self.text[self.position.index] if self.position.index < len(self.text) else None
         
     def make_tokens(self):
@@ -106,9 +112,10 @@ class Lexer:
                 tokens.append(Token(TT_RPAREN))
                 self.advance()
             else:
+                position_start = self.position.copy()
                 char = self.current_character
                 self.advance()
-                return [], IllegalCharError("'" + char + "'")
+                return [], IllegalCharError(position_start, self.position, "'" + char + "'")
                 
         
         return tokens, None
@@ -132,8 +139,8 @@ class Lexer:
             return Token(TT_FLOAT, float(num_str))
         
         
-def run(text):
-    lexer = Lexer(text)
+def run(file_name, text):
+    lexer = Lexer(file_name, text)
     tokens, error = lexer.make_tokens()
     
     return tokens, error
